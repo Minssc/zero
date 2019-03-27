@@ -114,7 +114,7 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>..\..\opencv401\x64\vc14\lib</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>..\..\opencv401\opencv_x64\vc14\lib</AdditionalLibraryDirectories>
       <AdditionalDependencies>opencv_world401d.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <ProjectReference>
