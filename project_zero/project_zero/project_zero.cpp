@@ -9,33 +9,28 @@
 
 using namespace std;
 using namespace cv;
-void detectAndDisplay(Mat frame);
+
 void processImage(Mat); 
+
 CascadeClassifier face_cascade;
-CascadeClassifier eyes_cascade;
+
 int main(int argc, const char** argv)
 {
 	CommandLineParser parser(argc, argv,
 		"{help h||}"
 		"{face_cascade|../../opencv401/cascades/haarcascade_frontalface_alt.xml|Path to face cascade.}"
-		"{eyes_cascade|../../opencv401/cascades/haarcascade_eye_tree_eyeglasses.xml|Path to eyes cascade.}"
+		//"{eyes_cascade|../../opencv401/cascades/haarcascade_eye_tree_eyeglasses.xml|Path to eyes cascade.}"
 		"{camera|0|Camera device number.}");
 	parser.about("\nMade to test bunch of stuff for our project.\n\n");
 	parser.printMessage();
 	String face_cascade_name = parser.get<String>("face_cascade");
-	String eyes_cascade_name = parser.get<String>("eyes_cascade");
+	//String eyes_cascade_name = parser.get<String>("eyes_cascade");
 	//-- 1. Load the cascades
 	if (!face_cascade.load(face_cascade_name))
 	{
 		cout << "--(!)Error loading face cascade\n";
 		return -1;
 	};
-	if (!eyes_cascade.load(eyes_cascade_name))
-	{
-		cout << "--(!)Error loading eyes cascade\n";
-		return -1;
-	};
-
 
 	int capturemode = -1;
 
@@ -100,32 +95,68 @@ int main(int argc, const char** argv)
 	return 0;
 }
 
-void processImage(Mat image) {
-
-}
-void detectAndDisplay(Mat frame)
-{
+int findFace(Mat *dest,Mat frame) {
 	Mat frame_gray;
 	cvtColor(frame, frame_gray, COLOR_BGR2GRAY);
 	equalizeHist(frame_gray, frame_gray);
 	//-- Detect faces
-	std::vector<Rect> faces;
+	vector<Rect> faces;
 	face_cascade.detectMultiScale(frame_gray, faces);
-	for (size_t i = 0; i < faces.size(); i++)
-	{
-		Point center(faces[i].x + faces[i].width / 2, faces[i].y + faces[i].height / 2);
-		ellipse(frame, center, Size(faces[i].width / 2, faces[i].height / 2), 0, 0, 360, Scalar(255, 0, 255), 4);
-		Mat faceROI = frame_gray(faces[i]);
-		//-- In each face, detect eyes
-		std::vector<Rect> eyes;
-		eyes_cascade.detectMultiScale(faceROI, eyes);
-		for (size_t j = 0; j < eyes.size(); j++)
-		{
-			Point eye_center(faces[i].x + eyes[j].x + eyes[j].width / 2, faces[i].y + eyes[j].y + eyes[j].height / 2);
-			int radius = cvRound((eyes[j].width + eyes[j].height)*0.25);
-			circle(frame, eye_center, radius, Scalar(255, 0, 0), 4);
-		}
+	//imshow("Capture - Face detection", frame);
+	if (faces.size() > 0) {
+		Mat iCrop = frame(faces[0]); // only return the first face. 
+		//imshow("ICROP", iCrop); 
+		*dest = iCrop;
+		return 1; 
 	}
-	//-- Show what you got
-	imshow("Capture - Face detection", frame);
+	return 0; 
+}
+
+void processImage(Mat image) {
+	Mat orig;
+	image.copyTo(orig); // backup imaage
+	if (!findFace(&image, image)) {
+		cout << "Cannot find a face!" << endl;
+	}
+	imshow("CROPPED FACE", image);
+
+	Mat image_gray;
+	cvtColor(image, image_gray, COLOR_BGR2GRAY); // gray image 
+
+	Mat image_HSV;
+	cvtColor(image, image_HSV, COLOR_BGR2HSV); // HSV image 
+
+	//medianBlur(image_gray, image_gray, 11); // apply median blur to reduce noise 
+	//GaussianBlur(image_gray, image_gray, { 3,3 } , 0); // gaussian blur 
+	equalizeHist(image_gray, image_gray);
+
+	//imshow("BLUR", image_gray);
+
+	//threshold(image_gray, image_gray, 50, 255, THRESH_BINARY); 
+	adaptiveThreshold(image_gray, image_gray, 255, ADAPTIVE_THRESH_GAUSSIAN_C, THRESH_BINARY_INV, 47, 2);
+	imshow("THRESHOLD", image_gray);
+
+	medianBlur(image_gray, image_gray, 3); // remove noise 
+	imshow("MEDIAN BLUR", image_gray);
+	medianBlur(image_gray, image_gray, 3); // remove noise 
+	medianBlur(image_gray, image_gray, 3); // remove noise 
+	medianBlur(image_gray, image_gray, 3); // remove noise 
+	medianBlur(image_gray, image_gray, 3); // remove noise 
+	medianBlur(image_gray, image_gray, 3); // remove noise 
+	medianBlur(image_gray, image_gray, 3); // remove noise 
+	imshow("MEDIAN BLUR2", image_gray);
+
+	Mat dilElement = getStructuringElement(MORPH_RECT, { 3,3 });
+
+	dilate(image_gray, image_gray, dilElement);
+	imshow("DILATE", image_gray);
+	erode(image_gray, image_gray, dilElement);
+	imshow("ERODE", image_gray);
+	//Canny(image_gray, image_gray, 150, 200); 
+	//imshow("CANNY", image_gray); 
+	
+	vector<vector<Point>> contours; 
+
+	//findContours(image_gray, contours, RETR_FLOODFILL, CHAIN_APPROX_NONE); 
+	//drawContours(image_gray, contours, 0, { 255,255,255 }, 2, 8); 
 }
