@@ -54,7 +54,7 @@ int main(int argc, const char** argv)
 				break;
 			}
 			IMPROC::processImage(image);
-			waitKey(0);
+			waitKey(2000);
 		}
 	}
 	else if (capturemode == 1) {
