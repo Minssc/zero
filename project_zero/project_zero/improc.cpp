@@ -7,6 +7,7 @@ using namespace std;
 using namespace cv;
 
 CascadeClassifier face_cascade;
+#define DOFINDFACE 0 
 
 
 
@@ -275,19 +276,20 @@ LOOP:
 		Mat orig;
 		image.copyTo(orig); // backup imaage
 
-		imshow("ORIG", orig);
+		//imshow("ORIG", orig);
 		balance_white(image);
 		imshow("WB", orig); 
 		
-		int r = findFace(&image, image); 
-		
-		switch (r) {
-		case 0:
-			cout << "Cannot find a face!" << endl; 
-			return; 
-		case 2:
-			cout << "Too many faces!" << endl; 
-			return; 
+		if (DOFINDFACE) {
+			int r = findFace(&image, image);
+			switch (r) {
+			case 0:
+				cout << "Cannot find a face!" << endl;
+				return;
+			case 2:
+				cout << "Too many faces!" << endl;
+				return;
+			}
 		}
 		
 		//imshow("FACE", image); 
@@ -300,13 +302,14 @@ LOOP:
 		cvtColor(image, image_HSV, COLOR_BGR2HSV); // HSV image 
 		//equalizeHist(image_gray, image_gray);
 		//imshow("equalizeHist", image_gray);
+		imshow("HSV",image_HSV); 
 
 		for (int i = 0; i < 10; i++) {
 			medianBlur(image_gray, image_gray, 3); // remove noise 
 		}
 
 		adaptiveThreshold(image_gray, image_gray, 255, ADAPTIVE_THRESH_MEAN_C, THRESH_BINARY_INV, 9, 1);
-		imshow("THRESHOLD", image_gray); 
+		//imshow("THRESHOLD", image_gray); 
 
 		for (int i = 0; i < 10; i++) {
 			medianBlur(image_gray, image_gray, 3); // remove noise 
@@ -326,8 +329,8 @@ LOOP:
 		inRange(image_HSV, Scalar(0, 50, 100), Scalar(8, 200, 255), mask1); // mask 
 		inRange(image_HSV, Scalar(172, 50, 100), Scalar(180, 200, 255), mask2); // mask2 
 		*/
-		inRange(image_HSV, Scalar(0, 120, 20), Scalar(8, 255, 255), mask1); // mask 
-		inRange(image_HSV, Scalar(172, 120, 20), Scalar(180, 255, 255), mask2); // mask2 
+		inRange(image_HSV, Scalar(0, 75, 230), Scalar(10, 255, 255), mask1); // mask 
+		inRange(image_HSV, Scalar(170, 75, 230), Scalar(180, 255, 255), mask2); // mask2 
 
 		Mat1b mask = mask1 | mask2;
 
@@ -344,7 +347,7 @@ LOOP:
 
 		mask = mask & image_gray;
 
-		imshow("COMBINED MASK", mask);
+		//imshow("COMBINED MASK", mask);
 
 		__sizeFilter(&mask,10,150); 
 

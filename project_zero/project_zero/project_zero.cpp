@@ -47,6 +47,8 @@ int main(int argc, const char** argv)
 			cout << "Error opening video capture" << endl;
 			return -1;
 		}
+		c.set(CAP_PROP_FRAME_WIDTH, 1280);
+		c.set(CAP_PROP_FRAME_HEIGHT, 720); 
 
 		while (c.read(image)) {
 			if (image.empty()) {
@@ -54,7 +56,7 @@ int main(int argc, const char** argv)
 				break;
 			}
 			IMPROC::processImage(image);
-			waitKey(2000);
+			waitKey(0);
 		}
 	}
 	else if (capturemode == 1) {
