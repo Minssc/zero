@@ -5,7 +5,8 @@
 #include <iostream>
 #include "improc.h"
 
-#define FACE_CASCADE_NAME "../../opencv401/cascades/haarcascade_frontalface_alt.xml"
+#define FACE_CASCADE_NAME "../../opencv401_extra/cascades/haarcascade_frontalface_default.xml"
+#define FACEMARK_MODEL "../../opencv401_extra/facemark/lbfmodel.yaml"
 #define CAM_DNO 0
 
 using namespace std;
@@ -14,16 +15,23 @@ using namespace cv;
 //void processImage(Mat); 
 
 extern CascadeClassifier face_cascade;
+Ptr<face::Facemark> facemark = face::FacemarkLBF::create();
 
 int main(int argc, const char** argv)
 {
 	//-- 1. Load the cascades
 
-	if (!face_cascade.load(FACE_CASCADE_NAME))
-	{
-		cout << "--(!)Error loading face cascade"<< endl;
+	cout << "Loading Face Cascade" << endl; 
+	if (!face_cascade.load(FACE_CASCADE_NAME)){
+		cout << "Error loading face cascade"<< endl;
 		return -1;
 	};
+
+	//IMPROC::printFacePolys();
+	//return 0; 
+
+	cout << "Loading Facemark Model" << endl; 
+	facemark->loadModel(FACEMARK_MODEL);
 
 	int capturemode = -1;
 

@@ -2,35 +2,92 @@
 #include "improc.h"
 #include <iostream> 
 #include <stack> 
+//#include "drawlandmarks.h"
+
 
 using namespace std;
 using namespace cv;
+using namespace cv::face;
 
 CascadeClassifier face_cascade;
 #define DOFINDFACE 0 
-
-
+extern Ptr<Facemark> facemark; 
 
 namespace IMPROC {
-	int findFace(Mat *dest, Mat frame) {
+
+	enum facePolyNames {
+		FOREHEAD, LEFT_CHEEK, RIGHT_CHEEK, NOSE, PHILTRUM, MOUTH, CHIN, LEFT_EYE, RIGHT_EYE, LEFT_EYEBROW, RIGHT_EYEBROW
+	};
+
+	std::vector<std::vector<int>> facePolyPoints = {
+		{1,18,19,20,21,22,23,24,25,26,27,17,70,69}, // additional points required
+		{13,14,15,16,17,46,47,48,43,36,55}, // LC
+		{1,2,3,4,5,49,32,40,41,42,37}, // RC 
+		{32,33,34,35,36,71,28,72}, // NO *71 and 72 avg of 40&28 and 43&28
+		{49,50,51,52,53,54,55,36,35,34,33,32}, // PH 
+		{49,50,51,52,53,54,55,56,57,58,59,60}, // MO 
+		{5,6,7,8,9,10,11,12,13,55,56,57,58,59,60,49}, // CH 
+		{43,44,45,46,47,48}, // LE 
+		{37,38,39,40,41,42}, // RE 
+		{18,19,20,21,22}, //LEY 
+		{23,24,25,26,27} //REY
+	};
+
+	void drawPolyline(
+		Mat &im,
+		const vector<Point2f> &landmarks,
+		const vector<int> &facePolyPoints,
+		Scalar &color,
+		bool isClosed = false
+	){
+		// Gather all points between the start and end indices
+		vector <Point> points;
+		for (int i = 0; i < facePolyPoints.size(); i++){
+			points.push_back(cv::Point(landmarks[facePolyPoints[i]-1].x, landmarks[facePolyPoints[i]-1].y));
+		}
+		// Draw polylines. 
+		polylines(im, points, isClosed, color, 1, 16);
+	}
+
+	void drawfacePoly(Mat &im, vector<Point2f> &landmarks, int FACEPOLYENUM,Scalar color){
+		drawPolyline(im, landmarks, facePolyPoints[FACEPOLYENUM],color,true);
+	}
+
+	int findFace(Mat *dest, Mat frame,vector<vector<Point2f>> &landmarks,Point &offset) {
 		Mat frame_gray;
 		cvtColor(frame, frame_gray, COLOR_BGR2GRAY);
 		equalizeHist(frame_gray, frame_gray);
 		//-- Detect faces
 		vector<Rect> faces;
 		face_cascade.detectMultiScale(frame_gray, faces);
-		//imshow("Capture - Face detection", frame);
+		offset = Point(faces[0].x, faces[0].y); 
+		float lowest_point = 0.0f;
+
+		if (facemark->fit(frame, faces, landmarks)) {
+			lowest_point = landmarks[0][0].y;
+			for (int i = 0; i < landmarks[0].size(); i++) {
+				if (lowest_point < landmarks[0][i].y)
+					lowest_point = landmarks[0][i].y;
+			}
+		}
+		// augment point 69 and 70 
+		landmarks[0].push_back(Point2f(landmarks[0][0].x,faces[0].y+2)); // point 69, combination of point 1's x and top of RoI
+		landmarks[0].push_back(Point2f(landmarks[0][16].x, faces[0].y+2)); // point 70, combination of point 17's x and top of RoI
+		landmarks[0].push_back((landmarks[0][27]+landmarks[0][42])/2); // point 71, avg of 28& 43
+		landmarks[0].push_back((landmarks[0][27] + landmarks[0][39]) / 2); // point 72, avg of 40 & 28
+
 		if (faces.size() > 1) {
 			return 2; // too many faces
 		}else if(faces.size()==1){
+			cout << faces[0] << endl; 
+			faces[0].height = faces[0].height > (lowest_point - faces[0].y) ? faces[0].height : (int)(lowest_point - faces[0].y + 2.5); // some additional pixels
+			cout << faces[0] << endl; 
 			Mat iCrop = frame(faces[0]); 
-			imshow("ICROP", iCrop);
 			*dest = iCrop;
 			return 1;
 		}
 		return 0;
 	}
-
 
 	Point2i *searchNeighbour(Mat *image,Mat *labels,int x,int y) {
 		Point2i *point = (Point2i*)malloc(sizeof(Point2i));
@@ -38,8 +95,6 @@ namespace IMPROC {
 		int cx, cy;
 		for (cx = x - 1; cx <= x+1; cx++) {
 			for (cy = y - 1; cy <= y+1; cy++) {
-				//_cx < 0 || _cx >= image->rows || _cy < 0 || _cy >= image->cols
-				//image->at<uchar>(cx, cy) == 0 || labels->at<uchar>(cx, cy) != 0
 				if (cx < 0 || cx >= image->rows || cy < 0 || cy >= image->cols)
 					continue; 
 				
@@ -53,7 +108,7 @@ namespace IMPROC {
 		return point; 
 	}
 
-	void __sizeFilter(Mat *image,int min,int max) {
+	void sizeFilter(Mat *image,int min,int max) {
 		Mat1b labels = Mat::zeros(image->size(), CV_8UC1);
 		int x, y;
 		int cx, cy;
@@ -69,7 +124,6 @@ namespace IMPROC {
 					continue; 
 				cx = x, cy = y;
 				area = 0; 
-				//labelcolor = (labelcolor + 10) % 254 + 1; 
 
 				while (1) {
 				LOOP:
@@ -89,19 +143,15 @@ namespace IMPROC {
 						cx = point->x, cy = point->y; 
 						stack.pop(); // pop stack top 
 						saved_stack.push(point);
-						//free(point); 
 						goto LOOP; // go back and try to find neighbour 
 					}
 				}
-
-			//	cout << area << endl;
 				while (1) {
 					if (saved_stack.empty())
 						break;
 					Point2i *point = saved_stack.top();
 
 					if (area < min || area >max) { // size filter apply 
-						//labels.at<uchar>(point->x, point->y) = 0; 
 						image->at<uchar>(point->x, point->y) = 0; 
 					}
 
@@ -111,117 +161,6 @@ namespace IMPROC {
 
 			}
 		}
-		//labels.copyTo(*image);
-		//imshow("LABELS", labels); 
-
-	}
-
-	void _sizeFilter(Mat *image) {
-		int x, y;
-		int cx, cy;
-		int _cx, _cy;
-		int area;
-		int labelcolor = 100;
-		stack <Point2i> stack; 
-		Mat1b labels = Mat::zeros(image->size(), CV_8UC1);
-
-		for (x = 0; x < image->rows/4; x++) {
-			for (y = 0; y < image->cols/4; y++) {
-				if (image->at<uchar>(x, y) == 0 || labels.at<uchar>(x, y) != 0)
-					continue; 
-				cx = x, cy = y, area = 1;
-				labelcolor = (labelcolor + 10) % 254 + 1;
-				cout << x << "," << y << endl; 
-
-				while (1) {
-GRASSFIRE:
-					for (_cx = cx - 1; _cx <= cx + 1; _cx++) {
-						for (_cy = cy - 1; _cy <= cy + 1; _cy++) {
-							if (_cx < 0 || _cx >= image->rows || _cy < 0 || _cy >= image->cols) // ignore out of bounds
-								continue; 
-
-							if (image->at<uchar>(_cx, _cy) == 255 && labels.at<uchar>(_cx, _cy) == 0) {
-								Point2i *point = (Point2i*)malloc(sizeof(Point2i)); 
-								//cout << point << endl; 
-								point->x = _cx, point->y = _cy;
-								stack.push(*point); 
-								labels.at<uchar>(_cx, _cy) = labelcolor;
-								cx = _cx, cy = _cy, area++;
-								goto GRASSFIRE;
-							}
-
-						}
-					}
-					if(stack.empty())
-						break;
-					Point2i point = stack.top(); 
-					//cout << &point << endl;
-					stack.pop(); 
-				}
-
-
-			}
-
-		}
-
-		imshow("LABELING", labels); 
-
-	}
-
-	void sizeFilter(Mat *image) {
-		int cx,cy,_cx,_cy,__cx,__cy;
-		int area = 0; 
-		int color = 55; 
-		stack <Point2i> s;
-		Mat1b map = Mat::zeros(image->size(), CV_8UC1);
-		Mat1b mask = Mat::zeros(image->size(), CV_8UC1);
-
-		for (cx=0; cx < image->rows; cx++) {
-			for (cy = 0; cy < image->cols; cy++) {
-				if (image->at<uchar>(cx, cy) == 255 || map.at<uchar>(cx,cy)!=0) // start counting pixels 
-					continue;
-				
-				_cx = cx,_cy = cy; 
-				area = 0;
-				color = (color + 1) % 254 + 1;
-
-				while (1) {
-
-LOOP:
-
-					for (__cx = _cx - 1; __cx <= _cx + 1; __cx++) {
-						for (__cy = _cy - 1; __cy <= _cy + 1; __cy++) {
-							if (__cx<0 || __cx >= image->rows || __cy <0 || __cy >= image->cols) // ignore out of bounds
-								continue; 
-
-							if (image->at<uchar>(__cx, __cy) == 255 && map.at<uchar>(__cx,__cy)==0) { // pos is set 
-								Point2i *pixel = (Point2i*)malloc(sizeof(Point2i));
-								pixel->x = __cy; pixel->y = __cx;
-								_cx = __cx; _cy = __cy; area++;
-								map.at<uchar>(__cx, __cy) = color;
-								s.push(*pixel);
-								goto LOOP; 
-							}
-						}
-					}
-					if (s.empty())
-						break;
-					if (area < 10 || area > 80) { // filter off too small or too big 
-						Point2i pixel = s.top();
-						mask.at<uchar>(pixel) = 255;
-						s.pop();
-						//free(&pixel); 
-						continue;
-						//cout << area << " is being removed" << endl; 
-					}
-					s.pop();
-				}
-			}
-		}
-		imshow("MAP", map); 
-		*image = *image ^ mask; 
-
-		imshow("SIZEFILTER MASK", mask); 
 	}
 
 	void balance_white(cv::Mat mat) {
@@ -271,7 +210,78 @@ LOOP:
 		}
 	}
 
+	void scaleContour(vector<vector<Point>> &contours,int index,float scale) {
+		Rect crect = boundingRect(contours[index]);
+		Point offset = Point(crect.x, crect.y); // top left corner of bounding box 
+		
+		for (int i = 0; i < contours[index].size(); i++) { // offset then scale then offset again all points
+			contours[index][i] = ((contours[index][i] - offset) * scale) + (offset + Point((crect.width - crect.width*scale)/2,(crect.height - crect.height*scale)/2)); 
+		}
+		/*
+		Moments Mom = moments(contours[index]); 
+		Point2f center = Point2f(Mom.m01 / Mom.m00, Mom.m10 / Mom.m00); 
+		Mat resizeboard; 
+		drawContours(board, contours, index, Scalar(255, 255, 255), 1, 8, noArray(), 0, Point()); // draw the contour onto the board
+		resizeboard = board(boundingRect(contours[index])); // cut out a rect surrounding the contours 
+		resize(resizeboard, resizeboard, resizeboard.size(), 0.9, 0.9, INTER_LINEAR); // resize it to 0.9 scale 
+		*///scrap redrawing 
+	}
 
+	void divideFace(Mat image, vector<vector<Point2f>> &landmarks,vector<vector<Point>> &contours) {
+
+		Mat1b board = Mat::zeros(image.size(), CV_8UC1);
+		Mat board2;// = Mat::zeros(image.size(), CV_8UC3);
+		board2 = image.clone(); 
+		waitKey(3000);
+
+		for (int FACEPOLYINDEX = 0; FACEPOLYINDEX < facePolyPoints.size(); FACEPOLYINDEX++) {
+			board = Mat::zeros(image.size(), CV_8UC1);
+			drawfacePoly(board, landmarks[0], FACEPOLYINDEX, Scalar(255, 255, 255));
+
+			vector<vector<Point>> contours_temp;
+			findContours(board, contours_temp, RETR_LIST, CHAIN_APPROX_NONE, Point(0, 0));
+
+			float max = 0;
+			for (int i = 0; i < contours_temp.size(); i++) {
+				if (contourArea(contours_temp[i]) > max) {
+					max = contourArea(contours_temp[i]);
+					if (contours.size() > FACEPOLYINDEX)
+						contours.erase(contours.begin() + FACEPOLYINDEX);
+					contours.insert(contours.begin() + FACEPOLYINDEX, contours_temp[i]); // pick the biggest contour of the found group
+				}
+			}
+			//FOREHEAD, LEFT_CHEEK, RIGHT_CHEEK, NOSE, PHILTRUM, MOUTH, CHIN, LEFT_EYE, RIGHT_EYE, LEFT_EYEBROW, RIGHT_EYEBROW
+			switch (FACEPOLYINDEX) {
+			case LEFT_CHEEK: case RIGHT_CHEEK: 
+				scaleContour(contours, FACEPOLYINDEX, 0.80);
+			case NOSE:
+				scaleContour(contours, FACEPOLYINDEX, 0.9);
+			case LEFT_EYE: case RIGHT_EYE:
+				scaleContour(contours, FACEPOLYINDEX, 1.5);
+			}
+
+			for (int i = 0; i < contours.size(); i++) {
+				drawContours(board2, contours, i, Scalar(0, 255, 255), 1, 8, noArray(), 0, Point(0, 0));
+			}
+			imshow("DRAWPOLY BOARD", board);
+			imshow("CONTOUR BOARD", board2);
+			waitKey(1000); 
+
+		}
+		cout << "final # of contours: " << contours.size() << endl; 
+		/*
+		for (int i = 0; i < landmarks.size(); i++) {
+			drawfacePoly(image, landmarks[i], LEFT_CHEEK, Scalar(255, 255, 255));
+			//drawfacePoly(image, landmarks[i], FOREHEAD, Scalar(255, 255, 255));
+			drawfacePoly(image, landmarks[i], RIGHT_CHEEK, Scalar(255, 255, 200));
+			drawfacePoly(image, landmarks[i], NOSE, Scalar(255, 200, 255));
+			drawfacePoly(image, landmarks[i], PHILTRUM, Scalar(200, 255, 255));
+			drawfacePoly(image, landmarks[i], MOUTH, Scalar(255, 0, 0));
+			drawfacePoly(image, landmarks[i], CHIN, Scalar(200, 200, 255));
+			drawfacePoly(image, landmarks[i], LEFT_EYE, Scalar(200, 255, 200));
+			drawfacePoly(image, landmarks[i], RIGHT_EYE, Scalar(200, 155, 200));
+		}*/
+	}
 	void processImage(Mat image) {
 		Mat orig;
 		image.copyTo(orig); // backup imaage
@@ -279,19 +289,42 @@ LOOP:
 		//imshow("ORIG", orig);
 		balance_white(image);
 		imshow("WB", orig); 
+
+		vector<vector<Point2f>> landmarks;
+		vector<vector<Point>> contours_facemark;
+		Point offset; 
 		
-		if (DOFINDFACE) {
-			int r = findFace(&image, image);
-			switch (r) {
-			case 0:
-				cout << "Cannot find a face!" << endl;
-				return;
-			case 2:
-				cout << "Too many faces!" << endl;
-				return;
+		int r = findFace(&image, image, landmarks, offset);
+		switch (r) {
+		case 0:
+			cout << "Cannot find a face!" << endl;
+			if (DOFINDFACE)
+				return; 
+		case 2:
+			cout << "Too many faces!" << endl;
+			return;
+		}
+
+		
+
+		//cout << "image size:" << image.size() << endl; 
+		float multiplier = 512.0f / image.size().width; 
+
+		resize(image, image, Size(image.size().width*multiplier,image.size().height*multiplier), 0, 0, INTER_LINEAR);
+		imshow("resized crop", image);
+		//cout << "resized size:" << image.size() << endl;
+
+		for (int i = 0; i < landmarks.size(); i++) {
+			for (int j = 0; j < landmarks[i].size(); j++) {
+				//cout << "before: " <<landmarks[i][j] << endl; 
+				landmarks[i][j] = (landmarks[i][j] - (Point2f)offset) * multiplier;
+				//cout << "after: " << landmarks[i][j] << endl;
 			}
 		}
-		
+
+
+		divideFace(image, landmarks, contours_facemark);
+
 		//imshow("FACE", image); 
 		
 		Mat image_gray;
@@ -300,7 +333,7 @@ LOOP:
 
 		Mat image_HSV;
 		cvtColor(image, image_HSV, COLOR_BGR2HSV); // HSV image 
-		//equalizeHist(image_gray, image_gray);
+		equalizeHist(image_gray, image_gray);
 		//imshow("equalizeHist", image_gray);
 		imshow("HSV",image_HSV); 
 
@@ -314,21 +347,8 @@ LOOP:
 		for (int i = 0; i < 10; i++) {
 			medianBlur(image_gray, image_gray, 3); // remove noise 
 		}
-		/*
-		Mat dilElement = getStructuringElement(MORPH_DILATE, { 3,3 });
-		Mat erodElement = getStructuringElement(MORPH_ERODE, { 3,3 });
-
-		dilate(image_gray, image_gray, dilElement);
-		erode(image_gray, image_gray, erodElement);
-		*/
-
 		Mat1b mask1 = Mat::zeros(image.size(), CV_8UC1);
 		Mat1b mask2 = Mat::zeros(image.size(), CV_8UC1);
-		/*
-		
-		inRange(image_HSV, Scalar(0, 50, 100), Scalar(8, 200, 255), mask1); // mask 
-		inRange(image_HSV, Scalar(172, 50, 100), Scalar(180, 200, 255), mask2); // mask2 
-		*/
 		inRange(image_HSV, Scalar(0, 75, 230), Scalar(10, 255, 255), mask1); // mask 
 		inRange(image_HSV, Scalar(170, 75, 230), Scalar(180, 255, 255), mask2); // mask2 
 
@@ -349,7 +369,7 @@ LOOP:
 
 		//imshow("COMBINED MASK", mask);
 
-		__sizeFilter(&mask,10,150); 
+		sizeFilter(&mask,10,150); 
 
 		imshow("COMBINED and size filtered MASK", mask);
 
@@ -365,32 +385,18 @@ LOOP:
 			}
 		}
 
-		//Mat erodElement = getStructuringElement(MORPH_ERODE, { 3,3 });
+		vector<vector<Point>> contours_pimple;
 
-		//erode(image_masked, image_masked, erodElement);
-
-
-
-		//imshow("FINAL MASKED IMAGE", image_masked);
-
-		vector<vector<Point>> contours;
-
-		findContours(mask, contours, RETR_LIST, CHAIN_APPROX_NONE, Point(0, 0));
+		findContours(mask, contours_pimple, RETR_LIST, CHAIN_APPROX_NONE, Point(0, 0));
 
 		Mat drawing = Mat::zeros(image_gray.size(), CV_8UC3);
-		for (int i = 0; i < contours.size(); i++)
-		{
-			/*
-			int area = contourArea(contours[i]); 
-			if (area <= 5 || area >= 100)
-				continue; 
-				*/
+		for (int i = 0; i < contours_pimple.size(); i++){
 			Scalar color = Scalar(0, 255, 255);
-			drawContours(drawing, contours, i, color, 1, 8, noArray(), 0, Point());
-			//cout << "area " << i << ": " << contourArea(contours[i]) << endl; 
+			drawContours(drawing, contours_pimple, i, color, 1, 8, noArray(), 0, Point());
 		}
 
-		imshow("Contours", drawing);
-	}
+		imshow("Pimple Contours", drawing);
 
+	}
 }
+
