@@ -114,7 +114,7 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>..\..\opencv401_extra\x64\vc15\lib</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>..\..\opencv401_extra\cv_x64\vc15\lib</AdditionalLibraryDirectories>
       <AdditionalDependencies>opencv_core401d.lib;opencv_face401d.lib;opencv_highgui401d.lib;opencv_imgproc401d.lib;opencv_objdetect401d.lib;opencv_video401d.lib;opencv_videoio401d.lib;opencv_photo401d.lib;opencv_stitching401d.lib;opencv_ml401d.lib;opencv_imgcodecs401d.lib;opencv_gapi401d.lib;opencv_flann401d.lib;opencv_features2d401d.lib;opencv_dnn401d.lib;opencv_calib3d401d.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <ProjectReference>
