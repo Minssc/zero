@@ -215,16 +215,8 @@ namespace IMPROC {
 		Point offset = Point(crect.x, crect.y); // top left corner of bounding box 
 		
 		for (int i = 0; i < contours[index].size(); i++) { // offset then scale then offset again all points
-			contours[index][i] = ((contours[index][i] - offset) * scale) + (offset + Point((crect.width - crect.width*scale)/2,(crect.height - crect.height*scale)/2)); 
+			contours[index][i] = ((contours[index][i] - offset) * scale) + (offset + Point((crect.width - crect.width * scale)/2,(crect.height - crect.height * scale)/2)); 
 		}
-		/*
-		Moments Mom = moments(contours[index]); 
-		Point2f center = Point2f(Mom.m01 / Mom.m00, Mom.m10 / Mom.m00); 
-		Mat resizeboard; 
-		drawContours(board, contours, index, Scalar(255, 255, 255), 1, 8, noArray(), 0, Point()); // draw the contour onto the board
-		resizeboard = board(boundingRect(contours[index])); // cut out a rect surrounding the contours 
-		resize(resizeboard, resizeboard, resizeboard.size(), 0.9, 0.9, INTER_LINEAR); // resize it to 0.9 scale 
-		*///scrap redrawing 
 	}
 
 	void divideFace(Mat image, vector<vector<Point2f>> &landmarks,vector<vector<Point>> &contours) {
@@ -252,12 +244,12 @@ namespace IMPROC {
 			}
 			//FOREHEAD, LEFT_CHEEK, RIGHT_CHEEK, NOSE, PHILTRUM, MOUTH, CHIN, LEFT_EYE, RIGHT_EYE, LEFT_EYEBROW, RIGHT_EYEBROW
 			switch (FACEPOLYINDEX) {
-			case LEFT_CHEEK: case RIGHT_CHEEK: 
-				scaleContour(contours, FACEPOLYINDEX, 0.80);
-			case NOSE:
-				scaleContour(contours, FACEPOLYINDEX, 0.9);
+			case LEFT_CHEEK: case RIGHT_CHEEK: case PHILTRUM: 
+				scaleContour(contours, FACEPOLYINDEX, 0.85);
+				break;
 			case LEFT_EYE: case RIGHT_EYE:
-				scaleContour(contours, FACEPOLYINDEX, 1.5);
+				scaleContour(contours, FACEPOLYINDEX, 1.25);
+				break;
 			}
 
 			for (int i = 0; i < contours.size(); i++) {
@@ -269,18 +261,6 @@ namespace IMPROC {
 
 		}
 		cout << "final # of contours: " << contours.size() << endl; 
-		/*
-		for (int i = 0; i < landmarks.size(); i++) {
-			drawfacePoly(image, landmarks[i], LEFT_CHEEK, Scalar(255, 255, 255));
-			//drawfacePoly(image, landmarks[i], FOREHEAD, Scalar(255, 255, 255));
-			drawfacePoly(image, landmarks[i], RIGHT_CHEEK, Scalar(255, 255, 200));
-			drawfacePoly(image, landmarks[i], NOSE, Scalar(255, 200, 255));
-			drawfacePoly(image, landmarks[i], PHILTRUM, Scalar(200, 255, 255));
-			drawfacePoly(image, landmarks[i], MOUTH, Scalar(255, 0, 0));
-			drawfacePoly(image, landmarks[i], CHIN, Scalar(200, 200, 255));
-			drawfacePoly(image, landmarks[i], LEFT_EYE, Scalar(200, 255, 200));
-			drawfacePoly(image, landmarks[i], RIGHT_EYE, Scalar(200, 155, 200));
-		}*/
 	}
 	void processImage(Mat image) {
 		Mat orig;
