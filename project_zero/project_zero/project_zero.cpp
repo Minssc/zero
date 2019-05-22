@@ -31,7 +31,7 @@ int main(int argc, const char** argv)
 	//return 0; 
 
 	cout << "Loading Facemark Model" << endl; 
-	facemark->loadModel(FACEMARK_MODEL);
+	//facemark->loadModel(FACEMARK_MODEL);
 
 	int capturemode = -1;
 
