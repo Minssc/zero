@@ -390,6 +390,37 @@ namespace IMPROC {
 			//imshow("PROCESSED AREA", points); 
 	}
 
+	void landmarkPoints(vector<Point2f> &landmarks, vector<Point2f> &data,int index) {
+		for (int i = 0; i < facePolyPoints[index].size(); i++) {
+			data.push_back(landmarks[facePolyPoints[index][i]-1]);
+		}
+	}
+
+	int getPlacement(vector<vector<Point>> &contour, int index, vector<vector<Point2f>> &landmarks,Size imgsize) {
+		//Rect CR = boundingRect(contour[index]); 
+		Mat contourMat = Mat::zeros(imgsize, CV_8UC1); 
+		drawContours(contourMat, contour, index, Scalar(255, 255, 255), 1, 8, noArray(), 0, Point());
+		imshow("WAT", contourMat); 
+		Moments M = moments(contourMat, false);
+		Point2f center = Point2f(M.m10 / M.m00, M.m01 / M.m00);
+		Mat visualize = Mat::zeros(imgsize, CV_8UC3);
+		//drawfacePoly(visualize, landmarks[i], i, Scalar(255, 0, 0));
+
+		for (int i = 0; i < facePolyPoints.size(); i++) {
+			vector<Point2f> lp;
+			landmarkPoints(landmarks[0], lp, i);
+		//	cout << pointPolygonTest(lp, center, false) << endl;
+			drawfacePoly(visualize, landmarks[0], i, Scalar(255, 0, 0));
+			circle(visualize, center, 1, Scalar(0, 0, 255), 1, 8, 0); 
+			imshow("VISUALIZE", visualize); 
+			//waitKey(1000); 
+			if (pointPolygonTest(lp, center, false) == 1) {
+				return i; 
+			}
+		}
+		return -1; 
+	}
+
 	void processImage(Mat image) {
 		Mat orig;
 		image.copyTo(orig); // backup imaage
@@ -476,7 +507,7 @@ namespace IMPROC {
 		*/
 		adaptiveThreshold(image_gray, image_gray, 255, ADAPTIVE_THRESH_MEAN_C, THRESH_BINARY_INV, 9, 5);
 		sizeFilter(&image_gray, 10, 65536); 
-		//imshow("THRESHOLD", image_gray); 
+		imshow("THRESHOLD", image_gray); 
 
 		for (int i = 0; i < 10; i++) {
 			medianBlur(image_gray, image_gray, 3); // remove noise 
@@ -484,12 +515,12 @@ namespace IMPROC {
 
 		Scalar avg_color;
 		Scalar deviation;
-		Mat1b testmask = Mat::zeros(image.size(),CV_8UC1);
+		Mat1b FMmask = Mat::zeros(image.size(),CV_8UC1);
 
-		getHSVAverage(image_HSV, testmask, avg_color, deviation, contours_facemark);
+		getHSVAverage(image_HSV, FMmask, avg_color, deviation, contours_facemark);
 		//cout << avg_color << endl; 
 		//cout << deviation << endl; 
-		imshow("FM MASK", testmask); 
+		imshow("FM MASK", FMmask);
 
 	//	Mat1b test1 = Mat::zeros(image.size(), CV_8UC1); 
 		Mat1b mask = Mat::zeros(image.size(), CV_8UC1); 
@@ -521,11 +552,21 @@ namespace IMPROC {
 		//dilate(mask, mask, dilElement);
 		//erode(mask, mask, erodElement);
 
-		mask = testmask & image_gray;
+		mask = FMmask & image_gray;
 
 		//imshow("COMBINED MASK", mask);
 
 		sizeFilter(&mask,25,250); 
+
+		// fill empty holes
+		Mat ff = mask.clone();
+		floodFill(ff, Point(0, 0),Scalar(255));
+		Mat ffi = ~ff;
+		//bitwise_not(ff,ffi); 
+
+		mask = mask | ffi;
+		// end fill holes 
+		//imshow("FF", result);
 
 		//imshow("COMBINED and size filtered MASK", mask);
 
@@ -548,7 +589,10 @@ namespace IMPROC {
 		Mat drawing = Mat::zeros(image_gray.size(), CV_8UC3);
 		for (int i = 0; i < contours_pimple.size(); i++){
 			Scalar color = Scalar(0, 0, 255);
+			if (getPlacement(contours_pimple, i, landmarks, image.size()) == NOSE) 
+				continue;
 			drawContours(drawing, contours_pimple, i, color, 1, 8, noArray(), 0, Point());
+			//cout<<getPlacement(contours_pimple, i, landmarks,image.size())<<endl; 
 		}
 
 		imshow("Pimple Contours", drawing);
