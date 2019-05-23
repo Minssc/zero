@@ -158,8 +158,8 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>..\..\opencv401_extra\x64\vc15\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>opencv_core401.lib;opencv_face401.lib;opencv_highgui401.lib;opencv_objdetect401.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>..\..\opencv401_extra\cv_x64\vc15\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>opencv_core401.lib;opencv_face401.lib;opencv_highgui401.lib;opencv_imgproc401.lib;opencv_objdetect401.lib;opencv_video401.lib;opencv_videoio401.lib;opencv_photo401.lib;opencv_ml401.lib;opencv_imgcodecs401.lib;opencv_gapi401.lib;opencv_flann401.lib;opencv_features2d401.lib;opencv_dnn401.lib;opencv_calib3d401.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>

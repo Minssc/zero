@@ -31,7 +31,7 @@ int main(int argc, const char** argv)
 	//return 0; 
 
 	cout << "Loading Facemark Model" << endl; 
-	//facemark->loadModel(FACEMARK_MODEL);
+	facemark->loadModel(FACEMARK_MODEL);
 
 	int capturemode = -1;
 
@@ -64,7 +64,7 @@ int main(int argc, const char** argv)
 				break;
 			}
 			IMPROC::processImage(image);
-			waitKey(0);
+			waitKey(400);
 		}
 	}
 	else if (capturemode == 1) {

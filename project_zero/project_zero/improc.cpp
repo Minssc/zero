@@ -60,6 +60,8 @@ namespace IMPROC {
 		//-- Detect faces
 		vector<Rect> faces;
 		face_cascade.detectMultiScale(frame_gray, faces);
+		if (faces.size() == 0)
+			return 0; 
 		offset = Point(faces[0].x, faces[0].y); 
 		float lowest_point = 0.0f;
 
@@ -79,9 +81,12 @@ namespace IMPROC {
 		if (faces.size() > 1) {
 			return 2; // too many faces
 		}else if(faces.size()==1){
-			cout << faces[0] << endl; 
+			//cout << faces[0] << endl; 
 			faces[0].height = faces[0].height > (lowest_point - faces[0].y) ? faces[0].height : (int)(lowest_point - faces[0].y + 3.5); // some additional pixels
-			cout << faces[0] << endl; 
+			//cout << faces[0] << endl; 
+			if (faces[0].height + faces[0].y >= frame.rows)
+				return 3;
+			//cout << faces[0].height + faces[0].y << ","<<frame.rows<<" passed" << endl;
 			Mat iCrop = frame(faces[0]); 
 			*dest = iCrop;
 			return 1;
@@ -248,6 +253,7 @@ namespace IMPROC {
 
 			vector<vector<Point>> contours_temp;
 			findContours(board, contours_temp, RETR_LIST, CHAIN_APPROX_NONE, Point(0, 0));
+			cout << "# of contours found: " << contours_temp.size() << endl; 
 
 			double max = 0;
 			for (int i = 0; i < contours_temp.size(); i++) {
@@ -294,8 +300,8 @@ namespace IMPROC {
 			for (int i = 0; i < contours.size(); i++) {
 				drawContours(board2, contours, i, Scalar(0, 255, 255), 1, 8, noArray(), 0, Point(0, 0));
 			}
-			imshow("DRAWPOLY BOARD", board);
-			imshow("CONTOUR BOARD", board2);
+			//imshow("DRAWPOLY BOARD", board);
+			//imshow("CONTOUR BOARD", board2);
 		}
 		cout << "final # of contours: " << contours.size() << endl; 
 	}
@@ -305,25 +311,24 @@ namespace IMPROC {
 		Mat AoI;
 
 		//Mat1b points = Mat::zeros(HSV_image.size(), CV_8UC1);
-		double m = 2.25;
+		enum {
+			H, S, V
+		};
+		double m[3] = { 3.5, 3.5, 4.0 };
 
 		for (int i = 0; i < contours.size(); i++) {
 
-			unsigned long sH = 0;
-			unsigned long sS = 0;
-			unsigned long sV = 0;
+			unsigned long sum[3] = { 0,0,0 };
 			unsigned int count = 0;
 
-			double vH = 0.0;
-			double vS = 0.0;
-			double vV = 0.0;
+			double var[3] = { 0.0,0.0,0.0 };
 
 			if (i == LEFT_EYE || i == RIGHT_EYE || i == LEFT_EYEBROW || i == RIGHT_EYEBROW || i == MOUTH)
 				continue;
 			RoI = boundingRect(contours[i]);
 			AoI = HSV_image(RoI);
 			cout << RoI << endl; 
-			imshow("AoI", AoI);
+			//imshow("AoI", AoI);
 
 			for (int x = 0; x < AoI.cols; x++) {
 				for (int y = 0; y < AoI.rows; y++) {
@@ -333,29 +338,37 @@ namespace IMPROC {
 
 					if (pointPolygonTest(contours[i], P, false)==1) {
 						//points.at<uchar>(P) = 255;
-						sH += HSV_image.at<Vec3b>(P)[0];
-						sS += HSV_image.at<Vec3b>(P)[1];
-						sV += HSV_image.at<Vec3b>(P)[2];
+						for (int hsv = H; hsv <= V; hsv++) {
+							sum[hsv] += HSV_image.at<Vec3b>(P)[hsv];
+						}
 						count++;
 					}
 				}
 			}
 
-			avg_col = Scalar((double)sH / count, (double)sS / count, (double)sV / count);
+			for (int hsv = H; hsv <= V; hsv++)
+				avg_col[hsv] = (double)sum[hsv] / count;
+
+			//cout << "avghsv: " << avg_col << endl; 
+			//avg_col = Scalar((double)sH / count, (double)sS / count, (double)sV / count);
 
 			for (int x = 0; x < AoI.cols; x++) {
 				for (int y = 0; y < AoI.rows; y++) {
 					Point P = Point(x + RoI.x, y + RoI.y);
 
 					if (pointPolygonTest(contours[i], P, false)==1) {
-						vH += (pow(HSV_image.at<Vec3b>(P)[0] - avg_col[0], 2));
-						vS += (pow(HSV_image.at<Vec3b>(P)[1] - avg_col[1], 2));
-						vV += (pow(HSV_image.at<Vec3b>(P)[2] - avg_col[2], 2));
+						for (int hsv = H; hsv <= V; hsv++)
+							var[hsv] += pow(HSV_image.at<Vec3b>(P)[hsv]-avg_col[hsv], 2);
 					}
 				}
 			}
 
-			deviation = Scalar(sqrt(vH / count), sqrt(vS / count), sqrt(vV / count));
+			for (int hsv = H; hsv <= V; hsv++)
+				deviation[hsv] = sqrt(var[hsv] / count);
+
+			//cout << "deviation: " << deviation << endl; 
+
+			//deviation = Scalar(sqrt(vH / count), sqrt(vS / count), sqrt(vV / count));
 
 			for (int x = 0; x < AoI.cols; x++) {
 				for (int y = 0; y < AoI.rows; y++) {
@@ -363,14 +376,16 @@ namespace IMPROC {
 					if (pointPolygonTest(contours[i], P, false) != 1)
 						continue;
 					Vec3b Pixel = HSV_image.at<Vec3b>(P); 
-					for (int n = 0; n < 3; n++) {
-						if (Pixel[n] <= (avg_col[n] - deviation[n] * m) || Pixel[n] >= (avg_col[n] + deviation[n] * m)) {
+					for (int hsv = H; hsv <= V; hsv++) {
+						if (Pixel[hsv] <= (avg_col[hsv] - deviation[hsv] * m[hsv]) || Pixel[hsv] >= (avg_col[hsv] + deviation[hsv] * m[hsv])) {
 							mask.at<uchar>(P) = 255;
 							break;
 						}
 					}
 				}
 			}
+
+			cout << "avg HSV for d=" << i << " = " << avg_col << ", dev = " << deviation << endl; 
 		}
 			//imshow("PROCESSED AREA", points); 
 	}
@@ -386,17 +401,19 @@ namespace IMPROC {
 		vector<vector<Point2f>> landmarks;
 		vector<vector<Point>> contours_facemark;
 		Point offset; 
-		/*
+		
 		int r = findFace(&image, image, landmarks, offset);
 		switch (r) {
 		case 0:
 			cout << "Cannot find a face!" << endl;
-			if (DOFINDFACE)
-				return; 
+			return; 
 		case 2:
 			cout << "Too many faces!" << endl;
 			return;
-		}*/
+		case 3:
+			cout << "Face too close!" << endl; 
+			return; 
+		}
 
 		float multiplier = 512.0f / image.size().width; 
 
@@ -405,14 +422,12 @@ namespace IMPROC {
 
 		for (int i = 0; i < landmarks.size(); i++) {
 			for (int j = 0; j < landmarks[i].size(); j++) {
-				//cout << "before: " <<landmarks[i][j] << endl; 
 				landmarks[i][j] = (landmarks[i][j] - (Point2f)offset) * multiplier;
-				//cout << "after: " << landmarks[i][j] << endl;
 			}
 		}
 
 
-		//divideFace(image, landmarks, contours_facemark);
+		divideFace(image, landmarks, contours_facemark);
 
 		//imshow("FACE", image); 
 		
@@ -424,15 +439,44 @@ namespace IMPROC {
 		cvtColor(image, image_HSV, COLOR_BGR2HSV); // HSV image 
 		equalizeHist(image_gray, image_gray);
 		//imshow("equalizeHist", image_gray);
-		imshow("HSV",image_HSV); 
-
+		//imshow("HSV",image_HSV); 
+		/*
 		for (int i = 0; i < 10; i++) {
 			medianBlur(image_gray, image_gray, 3); // remove noise 
-		}
+		}*/
 
-		adaptiveThreshold(image_gray, image_gray, 255, ADAPTIVE_THRESH_MEAN_C, THRESH_BINARY_INV, 11, 5);
+		Mat1b threshtest = Mat::zeros(image.size(), CV_8UC1);
+		Mat1b cannytest = Mat::zeros(image.size(), CV_8UC1);
+		/*
+		for (int i = 3; i < 32; i += 2) {
+			for (int k = 8; k < 13; k++) {
+				double C = (double)k / 2;
+				char str[512];
+				adaptiveThreshold(image_gray, threshtest, 255, ADAPTIVE_THRESH_MEAN_C, THRESH_BINARY_INV, i, C);
+				sprintf_s(str, "TH %d %f\n", i, C);
+				imshow(str, threshtest);
+			}
+		}
+		*/
+		//medianBlur(image_gray, image_gray, 11);
+		//GaussianBlur(image_gray, image_gray, Size(3, 3), 0);
+
+		/*
+		imshow("BLURRED", image_gray);
+		Canny(image_gray, cannytest, 50, 150);
+		imshow("CANNY", cannytest);
+		Mat dilElement = getStructuringElement(MORPH_DILATE, { 7,7 });
+		Mat erodElement = getStructuringElement(MORPH_ERODE, { 7,7 });
+
+		dilate(cannytest, cannytest, dilElement);
+		erode(cannytest, cannytest, erodElement);
+		imshow("D-E CAN", cannytest);
+
+		cout << image.size() << endl;
+		*/
+		adaptiveThreshold(image_gray, image_gray, 255, ADAPTIVE_THRESH_MEAN_C, THRESH_BINARY_INV, 9, 5);
 		sizeFilter(&image_gray, 10, 65536); 
-		imshow("THRESHOLD", image_gray); 
+		//imshow("THRESHOLD", image_gray); 
 
 		for (int i = 0; i < 10; i++) {
 			medianBlur(image_gray, image_gray, 3); // remove noise 
@@ -443,16 +487,17 @@ namespace IMPROC {
 		Mat1b testmask = Mat::zeros(image.size(),CV_8UC1);
 
 		getHSVAverage(image_HSV, testmask, avg_color, deviation, contours_facemark);
-		cout << avg_color << endl; 
-		cout << deviation << endl; 
+		//cout << avg_color << endl; 
+		//cout << deviation << endl; 
 		imshow("FM MASK", testmask); 
 
 	//	Mat1b test1 = Mat::zeros(image.size(), CV_8UC1); 
+		Mat1b mask = Mat::zeros(image.size(), CV_8UC1); 
 	//	inRange(image_HSV, avg_color - deviation, avg_color + deviation, test1);
 
 	//	imshow("MEAN DEV INRAGE", test1); 
 
-
+		/*
 		Mat1b mask1 = Mat::zeros(image.size(), CV_8UC1);
 		Mat1b mask2 = Mat::zeros(image.size(), CV_8UC1);
 		inRange(image_HSV, Scalar(0, 75, 230), Scalar(10, 255, 255), mask1); // mask 
@@ -467,17 +512,22 @@ namespace IMPROC {
 
 		dilate(mask, mask, dilElement);
 		erode(mask, mask, erodElement);
+		*/
+		//imshow("inRange", mask);
 
-		imshow("inRange", mask);
+		Mat dilElement = getStructuringElement(MORPH_DILATE, { 3,3 });
+		Mat erodElement = getStructuringElement(MORPH_ERODE, { 3,3 });
 
+		//dilate(mask, mask, dilElement);
+		//erode(mask, mask, erodElement);
 
 		mask = testmask & image_gray;
 
 		//imshow("COMBINED MASK", mask);
 
-		sizeFilter(&mask,10,150); 
+		sizeFilter(&mask,25,250); 
 
-		imshow("COMBINED and size filtered MASK", mask);
+		//imshow("COMBINED and size filtered MASK", mask);
 
 		Mat image_masked = image.clone();
 		for (int r = 0; r < image.rows; r++) { // apply mask to image 
@@ -497,7 +547,7 @@ namespace IMPROC {
 
 		Mat drawing = Mat::zeros(image_gray.size(), CV_8UC3);
 		for (int i = 0; i < contours_pimple.size(); i++){
-			Scalar color = Scalar(0, 255, 255);
+			Scalar color = Scalar(0, 0, 255);
 			drawContours(drawing, contours_pimple, i, color, 1, 8, noArray(), 0, Point());
 		}
 
